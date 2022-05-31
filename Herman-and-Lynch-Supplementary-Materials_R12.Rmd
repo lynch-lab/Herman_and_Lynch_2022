@@ -1,0 +1,1145 @@
+---
+title: Supplementary Materials for "Age-structured model reveals prolonged early immigration is key for colony establishment in Gentoo Penguins (Pygoscelis papua)"
+date: "3/13/2022"
+output:
+  pdf_document: default
+
+
+---
+
+| S.1: Details on age-structured modeling........................page 1  
+| S.2: Details on population projection models and ABC code.....page 8  
+|        Simulation Study of ABC model..........................page 10  
+|        Demonstration of ABC model with real data..............page 13  
+| S.3: Comparison of summary statistics..........................page 20   
+| S.4: Age class sensitivity.......................................page 36  
+| S.5: Georges Point.............................................page 37  
+
+
+```{r, message=FALSE, warning=FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(kableExtra)
+library(ggpubr)
+
+```
+
+## Supplemental Material S.1: Details on age-structured modeling 
+
+#### Age-structured matrix model code and simple population growth projections with no immigration
+\  
+
+Age-structured matrix: Equation 1
+\  
+
+$$ \overrightarrow{n}_{t+1} = \begin{bmatrix}
+       0 & S_{1(t)}m_{(t+1)} & S_{2(t)}m_{(t+1)} & S_{3(t)}m_{(t+1)}&S_{4(t)}m_{(t+1)}&S_{5(t)}m_{(t+1)}&S_{5+(t)}m_{(t+1)}           \\[0.3em]
+       S_0 & 0 & 0 & 0 & 0 & 0 & 0         \\[0.3em]
+       0 & S_{1(t)} & 0 & 0 & 0 & 0 & 0        \\[0.3em]
+       0  & 0 & S_{2(t)} & 0 & 0 & 0 & 0          \\[0.3em]
+       0  & 0 & 0 & S_{3(t)} & 0 & 0 & 0           \\[0.3em]
+       0  & 0 & 0 & 0 & S_{4(t)} & 0 & 0           \\[0.3em]
+       0  & 0 & 0 & 0 & 0 & S_{5(t)} & S_{5+(t)}           \\[0.3em]
+     \end{bmatrix} * \left (\overrightarrow{n}_t + \begin{bmatrix} 0 \\[0.3em]
+     0 \\[0.3em]
+     \phi \\[0.3em]
+     0 \\[0.3em]
+     0 \\[0.3em]
+     0 \\[0.3em]
+     0 \\[0.3em]
+     \end{bmatrix} \right) $$
+     
+
+Here we create the age-structured matrix model in Equation 1 using average survival rates (0.43 for sub-adults, 0.82 for adults) and chick productivity (0.76 females/nest assuming a 1:1 sex ratio) taken from Williams (1995) and Lynch et al. (2010), respectively.
+
+```{r, echo=T}
+G_max_chicks <- matrix(c(0.00,0.43*0.76,0.82*0.76,0.82*0.76,0.82*0.76,0.82*0.76,0.82*0.76,
+                         0.43,0.00,0.00,0.00,0.00,0.00,0.00,
+                         0.00,0.43,0.00,0.00,0.00,0.00,0.00,
+                         0.00,0.00,0.82,0.00,0.00,0.00,0.00,
+                         0.00,0.00,0.00,0.82,0.00,0.00,0.00,
+                         0.00,0.00,0.00,0.00,0.82,0.00,0.00,
+                         0.00,0.00,0.00,0.00,0.00,0.82,0.82), nrow = 7, byrow=TRUE)
+```
+
+Here we write a function to project population growth with no immigration (i.e. a closed system). We apply the age-structured matrix model in Equation 1, but set chick survival and adult survival to the maximum rates from Williams 1995. We provide observed time series for the four colonies of interest (Biscoe Point, Orne Island, Moot Point, and Vernadsky Station)
+
+```{r, fig.show="hold", warning=FALSE}
+### Function to simulate population growth with no immigration
+growth_alone <- function(Lmatrix, year, starters){
+  G.projected <- matrix(0, nrow = nrow(Lmatrix), ncol = year+1)
+  G0 <-matrix(c(0,0,starters,0,0,0,0), ncol = 1) 
+  G.projected[, 1] <- G0 
+  
+  for (j in 1:year)
+    {
+  G.projected[, j + 1] <- round((Lmatrix %*% (G.projected[,j])), digits = 0)
+  }
+  
+  output <- colSums(G.projected[3:7,], na.rm=TRUE)
+  return(output)}
+
+chick_surv <- 0.59
+adult_surv <- 0.89
+
+
+G_high <- matrix(c(0.00,chick_surv*0.76,adult_surv*0.76,adult_surv*0.76,adult_surv*0.76,adult_surv*0.76,adult_surv*0.76,
+                   chick_surv,0.00,0.00,0.00,0.00,0.00,0.00,
+                   0.00,chick_surv,0.00,0.00,0.00,0.00,0.00,
+                   0.00,0.00,adult_surv,0.00,0.00,0.00,0.00,
+                   0.00,0.00,0.00,adult_surv,0.00,0.00,0.00,
+                   0.00,0.00,0.00,0.00,adult_surv,0.00,0.00,
+                   0.00,0.00,0.00,0.00,0.00,adult_surv,adult_surv), nrow = 7, byrow=TRUE)
+
+
+# Observed Time Series and Respective Years
+BISC_count <- c(14,33,45,56,26,149,296,288,639,644,753,902,977,NA,NA,2401,2404,3081,3197)
+BISC_years <- c(1994,1995,1996,1997,1998,1999,2000,2001,2002,2003,2004,2005,2006,
+                2007,2008,2009,2010,2011, 2012)
+
+ORNE_count <- c(13,NA,NA,NA,NA,NA,41,NA,58,58,NA,103,NA,141,164,222,348,483,412,401)
+ORNE_years <- c(1999,2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,
+                2012,2013,2014,2015,2016,2017,2018)
+
+MOOT_count <- c(74,101,278,272,323,371,NA,479,463,558,430,NA,925)
+MOOT_years <- c(2005,2006,2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017)
+
+VERN_count <- c(21,51,13,NA,NA,206,NA,NA,236,NA,NA,379)
+VERN_years <- c(2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017, 2018)
+
+# Application of population growth function with no immigration
+BISC_no_immigration <- growth_alone(G_high,18,14)
+ORNE_no_immigration <- growth_alone(G_high,19,13)
+MOOT_no_immigration <- growth_alone(G_high,12,74)
+VERN_no_immigration <- growth_alone(G_high,11,21)
+
+```
+
+\newpage
+
+#### Biscoe Point with no immigration: 
+Blue circles indicate observed time series, and black triangles represent simulated time series.
+```{r, fig.show="hold", fig.dim = c(8, 6), results="hide"}
+plot(BISC_years, BISC_count, type = "b", col = "blue", pch = 16) +
+  points(BISC_years, BISC_no_immigration, type = "b", pch = 17)
+```
+
+\newpage
+
+
+#### Orne Islands with no immigration: 
+Blue circles indicate observed time series, and black triangles represent simulated time series.
+```{r, fig.show="hold", fig.dim = c(8, 6), results="hide"}
+plot(ORNE_years, ORNE_count, type = "b", col = "blue", pch = 16) +
+  points(ORNE_years, ORNE_no_immigration, type = "b", pch = 17)
+```
+
+\newpage
+
+
+#### Moot Point with no immigration: 
+Blue circles indicate observed time series, and black triangles represent simulated time series.
+```{r, fig.show="hold", fig.dim = c(8, 6), results="hide"}
+plot(MOOT_years, MOOT_count, type = "b", col = "blue", pch = 16) +
+  points(MOOT_years, MOOT_no_immigration, type = "b", pch = 17)
+```
+
+\newpage
+
+
+#### Vernadsky Station with no immigration: 
+Blue circles indicate observed time series, and black triangles represent simulated time series.
+```{r, fig.show="hold", fig.dim = c(8, 6), results="hide"}
+plot(VERN_years, VERN_count, type = "b", col = "blue", pch = 16) +
+  points(VERN_years, VERN_no_immigration, type = "b", pch = 17)
+```
+
+\newpage
+
+## Supplemental Material S.2: Details on population projection models, ABC code, and simulation study.
+
+We create a function to calculate a time series where lambda is constant given the following function inputs:
+```{r, warning=FALSE}
+immigration_constant <- function(Lmatrix, year, starters, lambda_temp){
+  # LMatrix is the age-structured matrix above
+  # year is the year length of the time series
+  # starters is the first nest count at the beginning of the time series
+
+  G.projected <- matrix(0, nrow = nrow(Lmatrix), ncol = year+1)# empty matrix 
+  # with number of years reflective of a given time series
+  G0 <-matrix(c(0,0,starters,0,0,0,0), ncol = 1) # vector that contains starting
+  # number of colonizers from a given time series
+  G.projected[, 1] <- G0 
+  immigration_storage <- c()
+  lambda_storage <- c()
+  for (j in 1:year) 
+  { 
+    immigration <- rpois(1, lambda_temp)
+    immigration_storage[j] <- immigration
+    lambda_storage[j] <- lambda_temp
+    M <- matrix(c(0,0,immigration,0,0,0,0), ncol = 1) # Migrant vector where above 
+    # immigration valued is incorporated
+    G.projected[, j + 1] <- round(Lmatrix %*% G.projected[,j]+M, digits = 0)
+    # projects matrix 
+  }
+  immigration_storage <- c(immigration_storage, NA)
+  lambda_storage <- c(lambda_storage, NA)# Adds one NA so that vector 
+  # is same length as G.series.
+  G.series <- colSums(G.projected[3:7,], na.rm=TRUE)
+  output <- cbind(G.series, lambda_storage, immigration_storage)
+  return(output)}
+
+```
+
+We create a function to calculate a time series where lambda increases linearly with abundance given the following function inputs:
+
+```{r, abundance function, echo=T}
+
+matrix_fun <- function(juv_surv, adult_surv, breed_succ){
+   matrix(c(0.00,juv_surv*breed_succ,adult_surv*breed_succ,adult_surv*breed_succ,adult_surv*breed_succ,adult_surv*breed_succ,adult_surv*breed_succ,
+                   juv_surv,0.00,0.00,0.00,0.00,0.00,0.00,
+                   0.00,juv_surv,0.00,0.00,0.00,0.00,0.00,
+                   0.00,0.00,adult_surv,0.00,0.00,0.00,0.00,
+                   0.00,0.00,0.00,adult_surv,0.00,0.00,0.00,
+                   0.00,0.00,0.00,0.00,adult_surv,0.00,0.00,
+                   0.00,0.00,0.00,0.00,0.00,adult_surv,adult_surv), nrow = 7, byrow=TRUE)}
+  
+empty_matrix <- matrix(data=NA, ncol=7, nrow=7)
+abundance_fun <- function(year, starters, intercept_temp, slope_temp){
+
+  G.projected <- matrix(0, nrow = nrow(empty_matrix), ncol = year+1) # empty matrix 
+  # with number of years reflective of a given time series
+  G0 <-matrix(c(0,0,starters,0,0,0,0), ncol = 1) # vector that contains starting 
+  # number of colonizers from a given time series
+  G.projected[, 1] <- G0 
+  immigration_storage <- c()
+  lambda <-c()
+  lambda_storage <- c()
+  
+  for (j in 1:year)
+  {
+    abundance <- colSums(G.projected[3:7,], na.rm=TRUE) # sums the number of 
+    # reproducing individuals in age classes 2-7.
+    lambda_temp<-intercept_temp+slope_temp*(abundance[j])
+    immigration<-rpois(1,lambda_temp)
+    lambda<-c(lambda_temp)
+    # immigration is function of abundance based on sum of individuals at time step j
+    immigration_storage[j] <- immigration
+    lambda_storage[j] <- lambda
+    M <- matrix(c(0,0,immigration,0,0,0,0), ncol = 1) # Migrant vector where above 
+    # immigration valued is incorporated
+    juv_surv <- truncnorm::rtruncnorm(1, a=0, b=1, mean=0.43, sd=0.08) # Truncated 
+    # normal prior distribution for juvenile survival
+    adult_surv <- truncnorm::rtruncnorm(1, a=0, b=1, mean=0.82, sd=0.035) # Truncated 
+    # normal prior distribution for adult survival
+    breed_succ <- truncnorm::rtruncnorm(1, a=0, b=2, mean=0.688, sd=0.0363) # Truncated 
+    # normal prior distribution for breeding success 
+    G.projected[, j + 1] <- round((matrix_fun(juv_surv,adult_surv,breed_succ) %*% (G.projected[,j]+M)), digits = 0) 
+    # projects matrix 
+  }
+  immigration_storage <- c(immigration_storage, NA)
+  lambda_storage <- c(lambda_storage, NA)# Adds one NA so that vector 
+  # is same length as G.series.
+  G.series <- colSums(G.projected[3:7,], na.rm=TRUE) # Sums the number of simulated 
+  # individuals for each series
+  output <- cbind(G.series, immigration_storage, lambda_storage)
+  return(output)}
+```
+
+We create a function to calculate a time series where lambda increases linearly with time given the following function inputs:
+```{r, time function, echo=T}
+time_growth <- function(intercept_temp, slope_temp, year, starters, Lmatrix){
+  imm_series <-rpois(year,pmax(0.001,intercept_temp+slope_temp*seq(year))) 
+  MS <- c()
+  for (i in imm_series)
+  {
+    M <- matrix(c(0,0,i,0,0,0,0), ncol = 1) # migrant vector
+    MS = cbind(MS, M)
+  }
+  G0 <-matrix(c(0,0,starters,0,0,0,0), ncol = 1)
+  G.projected <- matrix(0, nrow = nrow(Lmatrix), ncol = year+1)
+  G.projected[, 1] <- G0
+  for (j in 1:year)
+  {
+    G.projected[, j + 1] <- round((Lmatrix %*% (G.projected[,j]))+MS[,j], digits = 0)
+  }
+  immigration_storage <- c(imm_series, NA)
+  G_series <- cbind(colSums(G.projected[3:7,], na.rm=TRUE))
+  output <- cbind(G_series, immigration_storage)
+  return(output)}
+```
+
+
+For `G.projected[, j + 1] <- round((Lmatrix %*% (G.projected[,j]+M)), digits = 0)`, we make the assumption that immigrants show up after the current breeding season but before the following breeding season, and are then expected to survive before taking part in breeding.
+
+\newpage
+#### Application of ABC  
+
+The pseudo-code for our rejection-ABC approach proceeds as follows:
+
+1. Sample $\lambda$ from its prior distribution 
+2. Sample $\phi$~Pois($\lambda$) 
+3. Simulate abundance time series using $\phi$ and the dynamics described by Eq. 1
+4. Accept or reject simulations conditional on a threshold comparing the simulated data to the true data using a summary statistic (described in detail below). Values of $\lambda$ associated with accepted simulations are retained in the posterior.
+5. Repeat until N approximate posterior samples are obtained
+
+## Simulation Study
+
+We simulated an artificial time series using the age-structured matrix model. We first drew a random value for intercept and slope from uniform prior distributions and applied them to the growth functions. This resulted in a simulated artificial time series and a simulated number of immigrants contributing annually to the time series (See table below). We then ran our ABC model to fit the artificial time series. The code for the ABC is shown below:
+
+```{r, eval=FALSE}
+# Simulated artificial time series
+SIM_count <-c(5,18,29,55,77,119,151,202,251,343,459,573,
+              655,844,980,1133,1396,1701,1981,2384,2969)
+
+SIM_years <- c(1994,1995,1996,1997,1998,1999,2000,2001,2002,2003,2004,2005,2006,
+               2007,2008,2009,2010,2011, 2012, 2013, 2014)
+
+# Simulated number of immigrants each year
+SIM_imm <- c(17,22,35,37,55,57,81,86,123,158,186,207,
+             261,318,348,405,561,583,768,837,NA)
+
+Data <- as.data.frame(cbind(SIM_years, SIM_count, SIM_imm))
+colnames(Data) <- c("year","count","immigrants")
+
+site_details<-data.frame(c("ORNE","BISC","MOOT","VERN","SIM"),c(13,14,74,21,5),c(19,18,12,11,20)) 
+# stores site data (name, starting value, and time series length)
+colnames(site_details)<-c("Site","Count","TimeSpan")
+selection<-site_details$Site=="SIM" # can be changed out for ORNE, MOOT, and VERN
+N <- 1000 # number of accepted particles
+keep <- matrix(ncol = 2, nrow = N)
+intercept <- c()  
+slope <- c() 
+i <- 0 # Initiate counter of accepted particles
+j <- 0 # Initiate counter of proposed particles
+
+year <- site_details$TimeSpan[selection] # input year from selected site data
+keep_immigrants <- c()
+keep_lambda <- c()
+keep_mape <- c()
+reject_lambda <- c()
+reject_mape <- c()
+reject_timeseries <-Data$count
+simulated_timeseries<-Data$count
+kept_timeseries<-Data$count
+while(i <= N)
+{ 
+  intercept_temp <- runif(1, 0, 100)
+  slope_temp <- runif(1, -1, 1)
+  intercept<- c(intercept, intercept_temp)
+  slope <- c(slope, slope_temp)
+  D_star <- abundance_fun(year, site_details$Count[selection], 
+                          intercept_temp, slope_temp)
+  simulated_timeseries<-cbind(simulated_timeseries,D_star[,1])
+  MAPE_i <- mean(abs((Data$count-D_star[,1])/Data$count), na.rm=TRUE) * 100 
+  # # mean absolute percent error (MAPE) metric
+  if(MAPE_i <= 16)
+  { 
+    keep[i,] <- c(intercept_temp, slope_temp)
+    i <- i + 1 #update counter
+    kept_timeseries<-cbind(kept_timeseries,D_star[,1])
+    keep_immigrants <-cbind(keep_immigrants, D_star[,2])
+    keep_lambda <-cbind(keep_lambda, D_star[,3])
+    keep_mape <-cbind(keep_mape, MAPE_i)
+  }
+  else
+  {
+    reject_lambda <- cbind(reject_lambda, D_star[,3])
+    reject_mape <- cbind(reject_mape, MAPE_i)
+    reject_timeseries<-cbind(reject_timeseries,D_star[,1])
+  }
+  j <- j + 1 
+  acc_rate <- i/j # calculate the acceptance rate
+  cat("current acceptance rate = ", round(acc_rate, 4), "\n")
+}
+```
+
+The table below shows the true artificial time series, the true artificial number of immigrants, the mean values of the accepted simulated number of immigrants, and the respective CIs.
+
+```{r simulation, echo=FALSE}
+# Artificial time series
+SIM_count <-c(5,18,29,55,77,119,151,202,251,343,459,573,
+              655,844,980,1133,1396,1701,1981,2384,2969) 
+
+# Artificial year series
+SIM_years <- c(1994,1995,1996,1997,1998,1999,2000,2001,2002,2003,2004,2005,2006,
+               2007,2008,2009,2010,2011, 2012, 2013, 2014)
+
+# Artificial number of immigrants per year
+SIM_imm <- c(17,22,35,37,55,57,81,86,123,158,186,207,261,318,348,405,561,583,768,837,NA)
+
+SIM_low <- c(11,16,19,27,37,39,55,65,79,100,119,152,180,217,252,297,349,395,474,530,NA)
+
+SIM_high <- c(28,37,43,51,65,77,92,115,139,167,202,241,297,373,446,563,696,878,1139,1399,NA)
+
+SIM_means <- c(19,26,31,39,48,59,73,89,107,130,158,193,235,283,339,412,498,606,730,884,NA)
+
+Data <- as.data.frame(cbind(SIM_count, SIM_imm, SIM_means, SIM_low, SIM_high))
+colnames(Data) <- c("True time series","True number of immigrants", 
+                    "Mean simulated immigrants","95% Lower CI", "95% Upper CI" )
+Data %>%
+  kbl() %>%
+  kable_minimal(full_width=F,position="left")
+```
+
+
+The figure on the left is the simulated artificial number of immigrants (black triangles, and the estimated number of immigrants (blue dots) and CIs (blue lines). The figures on the right are the posterior distributions of slope and intercept parameters. Results confirm that our model successfully captured the true parameter values of the simulated time series.
+
+
+![](/Users/rachaelherman/Desktop/sim_immigrants.png)
+
+\newpage
+
+## Demonstration of ABC model code with real data
+
+Here we create a dataframe that stores the count and year data (Biscoe Point in this case).
+
+```{r, echo=T}
+
+BISC_count <- c(14,33,45,56,26,149,296,288,639,644,753,902,977,NA,NA,2401,2404,3081,3197)
+BISC_years <- c(1994,1995,1996,1997,1998,1999,2000,2001,2002,2003,2004,2005,2006,
+                2007,2008,2009,2010,2011, 2012)
+Data <- as.data.frame(cbind(BISC_years, BISC_count))
+colnames(Data) <- c("year","count")
+Data %>%
+  kbl() %>%
+  kable_minimal(full_width=F,position="left")
+```
+
+Here we illustrate the use of the ABC code with the abundance-dependent model for the site Biscoe Point.
+
+```{r, BISC ABC, echo=T,  results = "hide",cache=TRUE, warning=FALSE}
+site_details<-data.frame(c("ORNE","BISC","MOOT","VERN"),c(13,14,74,21),c(19,18,12,11)) 
+# stores site data (name, starting value, and time series length)
+colnames(site_details)<-c("Site","Count","TimeSpan")
+selection<-site_details$Site=="BISC" # can be changed out for ORNE, MOOT, and VERN
+N <- 20 # number of accepted particles
+keep <- matrix(ncol = 2, nrow = N)
+intercept <- c()  
+slope <- c() 
+i <- 0 # Initiate counter of accepted particles
+j <- 0 # Initiate counter of proposed particles
+
+year <- site_details$TimeSpan[selection] # input year from selected site data
+keep_immigrants <- c()
+keep_lambda <- c()
+keep_mape <- c()
+reject_lambda <- c()
+reject_mape <- c()
+reject_timeseries <-Data$count
+simulated_timeseries<-Data$count
+kept_timeseries<-Data$count
+while(i <= N)
+{ 
+  intercept_temp <- runif(1, 0, 40)
+  slope_temp <- runif(1, 0, 1)
+  intercept<- c(intercept, intercept_temp)
+  slope <- c(slope, slope_temp)
+  D_star <- abundance_fun(year, site_details$Count[selection], 
+                          intercept_temp, slope_temp)
+  simulated_timeseries<-cbind(simulated_timeseries,D_star[,1])
+  MAPE_i <- mean(abs((Data$count-D_star[,1])/Data$count), na.rm=TRUE) * 100 
+  # # mean absolute percent error (MAPE) metric
+  if(MAPE_i <= 35)
+  { 
+    keep[i,] <- c(intercept_temp, slope_temp)
+    i <- i + 1 #update counter
+    kept_timeseries<-cbind(kept_timeseries,D_star[,1])
+    keep_immigrants <-cbind(keep_immigrants, D_star[,2])
+    keep_lambda <-cbind(keep_lambda, D_star[,3])
+    keep_mape <-cbind(keep_mape, MAPE_i)
+  }
+  else
+    {
+      reject_lambda <- cbind(reject_lambda, D_star[,3])
+      reject_mape <- cbind(reject_mape, MAPE_i)
+      reject_timeseries<-cbind(reject_timeseries,D_star[,1])
+    }
+  j <- j + 1 
+  acc_rate <- i/j # calculate the acceptance rate
+  cat("current acceptance rate = ", round(acc_rate, 4), "\n")
+}
+
+```
+
+
+We plot the simulated accepted time series for Biscoe Point. Black lines are all simulated series and cyan are N number of accepted series (N=20 here). Dark blue squares represent the actual abundance data.
+
+```{r, echo=T}
+{plot(Data$year,Data$count,pch=15,ylim=c(0,4000), main="Biscoe Point", xlab="Year", ylab="Count")
+  for (k in 1:min(j,2000))
+  {
+    lines(Data$year,simulated_timeseries[,k],col=rgb(0,0,0,0.1))
+  }
+  for (m in 1:i)
+  {
+    lines(Data$year,kept_timeseries[,m],col="cyan4")
+  }
+  points(Data$year,Data$count,pch=15,col="darkblue")}
+
+```
+
+\newpage
+
+Here we illustrate the use of the ABC code with the abundance-dependent model for the site Orne Islands.
+
+```{r, echo=T, warning=FALSE}
+
+ORNE_count <- c(13,NA,NA,NA,NA,NA,41,NA,58,58,NA,103,NA,141,164,222,348,483,412,401)
+ORNE_years <- c(1999,2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,
+                2012,2013,2014,2015,2016,2017,2018)
+Data <- as.data.frame(cbind(ORNE_years, ORNE_count))
+colnames(Data) <- c("year","count")
+
+Data %>%
+  kbl() %>%
+  kable_minimal(full_width=F,position="left")
+```
+
+```{r, ORNE ABC, results="hide", cache=TRUE, warning=FALSE}
+site_details<-data.frame(c("ORNE","BISC","MOOT","VERN"),c(13,14,74,21),c(19,18,12,11)) 
+# stores site data (name, starting value, and time series length)
+colnames(site_details)<-c("Site","Count","TimeSpan")
+selection<-site_details$Site=="ORNE" # can be changed out for ORNE, MOOT, and VERN
+N <- 100 # number of accepted particles
+keep <- matrix(ncol = 2, nrow = N) 
+intercept <- c()  
+slope <- c() 
+i <- 0 # Initiate counter of accepted particles
+j <- 0 # Initiate counter of proposed particles
+
+year <- site_details$TimeSpan[selection] # input year from selected site data
+keep_immigrants <- c()
+keep_lambda <- c()
+reject_lambda <- c()
+keep_mape <- c()
+simulated_timeseries<-Data$count
+kept_timeseries<-Data$count
+while(i <= N)
+{ 
+  #intercept_temp <- runif(1, 0, 40) # intercept prior for abundance function
+  #slope_temp <- runif(1, 0.001, 1) # slope prior for abundance function
+  #intercept_temp <- runif(1, -5, 40) BISC # intercept prior for abundance function
+  #slope_temp <- runif(1, 0, 1) BISC # slope prior for abundance function
+  intercept_temp <- runif(1, -20, 20)
+  slope_temp <- runif(1, 0, 1)
+  intercept<- c(intercept, intercept_temp)
+  slope <- c(slope, slope_temp)
+  D_star <- abundance_fun(year, site_details$Count[selection], 
+                          intercept_temp, slope_temp)
+  simulated_timeseries<-cbind(simulated_timeseries,D_star[,1])
+  MAPE_i <- mean(abs((Data$count-D_star[,1])/Data$count), na.rm=TRUE) * 100 
+  # # mean absolute percent error (MAPE) metric
+  if(MAPE_i <= 22)
+  { 
+    keep[i,] <- c(intercept_temp, slope_temp)
+    i <- i + 1 #update counter
+    kept_timeseries<-cbind(kept_timeseries,D_star[,1])
+    keep_immigrants <-cbind(keep_immigrants, D_star[,2])
+    keep_lambda <-cbind(keep_lambda, D_star[,3])
+    keep_mape <-cbind(keep_mape, MAPE_i)
+  }
+  else
+  {reject_lambda <- cbind(reject_lambda, D_star[,3])
+  }
+  j <- j + 1 
+  acc_rate <- i/j # calculate the acceptance rate
+  cat("current acceptance rate = ", round(acc_rate, 4), "\n")
+}
+```
+
+We plot the simulated accepted time series for Orne Islands. Black lines are all simulated series and cyan are N number of accepted series (N=20 here). Dark blue squares represent the actual abundance data.
+
+```{r, echo=T}
+{plot(Data$year,Data$count,pch=15,ylim=c(0,600), 
+   main="Orne Islands", xlab="Year", ylab="Count")
+  for (k in 1:min(j,2000))
+  {
+    lines(Data$year,simulated_timeseries[,k],col=rgb(0,0,0,0.1))
+  }
+  for (m in 1:i)
+  {
+    lines(Data$year,kept_timeseries[,m],col="cyan4")
+  }
+  points(Data$year,Data$count,pch=15,col="darkblue")}
+```
+
+\newpage
+
+Here we illustrate the use of the ABC code with the abundance-dependent model for the site Moot Point.
+
+```{r, echo=T}
+
+MOOT_count <- c(74,101,278,272,323,371,NA,479,463,558,430,NA,925)
+MOOT_years <- c(2005,2006,2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017)
+Data <- as.data.frame(cbind(MOOT_years, MOOT_count))
+colnames(Data) <- c("year","count")
+
+Data %>%
+  kbl() %>%
+  kable_minimal(full_width=F,position="left")
+```
+
+```{r, MOOT ABC, echo=T, results = "hide", cache=TRUE, warning=FALSE}
+ site_details<-data.frame(c("ORNE","BISC","MOOT","VERN"),c(3,14,74,21),c(19,18,12,11)) 
+  # stores site data (name, starting value, and time series length)
+  colnames(site_details)<-c("Site","Count","TimeSpan")
+  selection<-site_details$Site=="MOOT" # can be changed out for ORNE, MOOT, and VERN
+  N <- 20 # number of accepted particles
+  keep <- matrix(ncol = 2, nrow = N) 
+  intercept <- c()  
+  slope <- c() 
+  i <- 0 # Initiate counter of accepted particles
+  j <- 0 # Initiate counter of proposed particles
+  
+  year <- site_details$TimeSpan[selection] # input year from selected site data
+  keep_immigrants <- c()
+  keep_lambda <- c()
+  reject_lambda <- c()
+  keep_mape <- c()
+  simulated_timeseries<-Data$count
+  kept_timeseries<-Data$count
+  while(i <= N)
+  { 
+    #intercept_temp <- runif(1, 0, 40) # intercept prior for abundance function
+    #slope_temp <- runif(1, 0.001, 1) # slope prior for abundance function
+    #intercept_temp <- runif(1, -5, 40) BISC # intercept prior for abundance function
+    #slope_temp <- runif(1, 0, 1) BISC # slope prior for abundance function
+    intercept_temp <- runif(1, 0,300)
+    slope_temp <- runif(1, -1, 1)
+    intercept<- c(intercept, intercept_temp)
+    slope <- c(slope, slope_temp)
+    D_star <- abundance_fun(year, site_details$Count[selection], 
+                            intercept_temp, slope_temp)
+    simulated_timeseries<-cbind(simulated_timeseries,D_star[,1])
+    MAPE_i <- mean(abs((Data$count-D_star[,1])/Data$count), na.rm=TRUE) * 100 
+    # # mean absolute percent error (MAPE) metric
+    if(MAPE_i <= 20)
+    { 
+      keep[i,] <- c(intercept_temp, slope_temp)
+      i <- i + 1 #update counter
+      kept_timeseries<-cbind(kept_timeseries,D_star[,1])
+      keep_immigrants <-cbind(keep_immigrants, D_star[,2])
+      keep_lambda <-cbind(keep_lambda, D_star[,3])
+      keep_mape <-cbind(keep_mape, MAPE_i)
+    }
+    else
+    {reject_lambda <- cbind(reject_lambda, D_star[,3])
+    }
+    j <- j + 1 
+    acc_rate <- i/j # calculate the acceptance rate
+    cat("current acceptance rate = ", round(acc_rate, 4), "\n")
+  }
+
+```
+
+We plot the simulated accepted time series for Moot Point. Black lines are all simulated series and cyan are N number of accepted series (N=20 here). Dark blue squares represent the actual abundance data.
+
+```{r, echo=T}
+  {plot(Data$year,Data$count,pch=15,ylim=c(0,1000), main="Moot Point", xlab="Year", ylab="Count")
+    for (k in 1:min(j,2000))
+    {
+      lines(Data$year,simulated_timeseries[,k],col=rgb(0,0,0,0.1))
+    }
+    for (j in 1:i)
+    {
+      lines(Data$year,kept_timeseries[,j],col="cyan4")
+    }
+    points(Data$year,Data$count,pch=15,col="darkblue")}
+```
+
+
+\newpage
+
+Here we illustrate the use of the ABC code with the abundance-dependent model for the site Vernadsky Station.
+
+```{r, echo=T}
+
+VERN_count <- c(21,51,13,NA,NA,206,NA,NA,236,NA,NA,379)
+VERN_years <- c(2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017, 2018)
+Data <- as.data.frame(cbind(VERN_years, VERN_count))
+colnames(Data) <- c("year","count")
+
+Data %>%
+  kbl() %>%
+  kable_minimal(full_width=F,position="left")
+```
+
+```{r, VERN ABC, echo=T, results = "hide", cache=TRUE, warning=FALSE}
+
+  VERN_count <- c(21,51,13,NA,NA,206,NA,NA,236,NA,NA,379)
+  VERN_years <- c(2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017, 2018)
+  Data <- as.data.frame(cbind(VERN_years, VERN_count))
+  colnames(Data) <- c("year","count")
+  
+  site_details<-data.frame(c("ORNE","BISC","MOOT","VERN"),c(13,14,74,21),c(19,18,12,11)) 
+  # stores site data (name, starting value, and time series length)
+  colnames(site_details)<-c("Site","Count","TimeSpan")
+  selection<-site_details$Site=="VERN" # can be changed out for ORNE, MOOT, and VERN
+  N <- 20 # number of accepted particles
+  keep <- matrix(ncol = 2, nrow = N) 
+  intercept <- c()  
+  slope <- c() 
+  i <- 0 # Initiate counter of accepted particles
+  j <- 0 # Initiate counter of proposed particles
+  
+  year <- site_details$TimeSpan[selection] # input year from selected site data
+  keep_immigrants <- c()
+  keep_lambda <- c()
+  reject_lambda <- c()
+  keep_mape <- c()
+  simulated_timeseries<-Data$count
+  kept_timeseries<-Data$count
+  while(i <= N)
+  { 
+    intercept_temp <- runif(1, -50, 50)
+    slope_temp <- runif(1, -1, 2)
+    intercept<- c(intercept, intercept_temp)
+    slope <- c(slope, slope_temp)
+    D_star <- abundance_fun(year, site_details$Count[selection], 
+                            intercept_temp, slope_temp)
+    simulated_timeseries<-cbind(simulated_timeseries,D_star[,1])
+    MAPE_i <- mean(abs((Data$count-D_star[,1])/Data$count), na.rm=TRUE) * 100 
+    # # mean absolute percent error (MAPE) metric
+    if(MAPE_i <= 45)
+    { 
+      keep[i,] <- c(intercept_temp, slope_temp)
+      i <- i + 1 #update counter
+      kept_timeseries<-cbind(kept_timeseries,D_star[,1])
+      keep_immigrants <-cbind(keep_immigrants, D_star[,2])
+      keep_lambda <-cbind(keep_lambda, D_star[,3])
+      keep_mape <-cbind(keep_mape, MAPE_i)
+    }
+    else
+    {reject_lambda <- cbind(reject_lambda, D_star[,3])
+    }
+    j <- j + 1 
+    acc_rate <- i/j # calculate the acceptance rate
+    cat("current acceptance rate = ", round(acc_rate, 4), "\n")
+  }
+
+```
+
+We plot the simulated accepted time series for Vernadsky. Black lines are all simulated series and cyan are N number of accepted series (N=20 here). Dark blue squares represent the actual abundance data.
+
+```{r, echo=T}
+  {plot(Data$year,Data$count,pch=15,ylim=c(0,400), main="Vernadksy Station", xlab="Year", ylab="Count")
+    for (k in 1:min(j,2000))
+    {
+      lines(Data$year,simulated_timeseries[,k],col=rgb(0,0,0,0.1))
+    }
+    for (m in 1:i)
+    {
+      lines(Data$year,kept_timeseries[,m],col="cyan4")
+    }
+    points(Data$year,Data$count,pch=15,col="darkblue")}
+```
+
+\newpage
+
+#### Immigration that turns off after a specified period of time
+
+We create a function where immigration increases linearly with abundance year_stop.
+
+```{r, echo=T}
+mig_abund_stop <- function(Lmatrix, year, starters, intercept_temp, slope_temp, year_stop){
+    G.projected <- matrix(0, nrow = nrow(Lmatrix), ncol = year+1)
+    G0 <-matrix(c(0,0,starters,0,0,0,0), ncol = 1) 
+    G.projected[, 1] <- G0
+    immigration_storage <- c()
+    lambda <-c()
+    lambda_storage <- c()
+    
+    for (j in 1:year_stop)
+    {
+      abundance <- colSums(G.projected[3:7,], na.rm=TRUE)
+      lambda_temp<-intercept_temp+slope_temp*(abundance[j])
+      immigration<-rpois(1,lambda_temp)
+      lambda<-c(lambda,lambda_temp)
+      # immigration is function of abundance based on sum of individuals at time step j
+      immigration_storage[j] <- immigration
+      lambda_storage[j] <- lambda
+      M <- matrix(c(0,0,immigration,0,0,0,0), ncol = 1) # migrant vector 
+      G.projected[, j + 1] <- round((Lmatrix %*% (G.projected[,j]+M)), digits = 0)
+    }
+    
+    for (k in year_stop:year){ # stops simulating immigration in a given year
+      G.projected[, k + 1] <- round((Lmatrix %*% (G.projected[,k])), digits = 0)
+    }
+    immigration_storage <- c(immigration_storage, NA)
+    lambda_storage <- c(lambda_storage, NA)# Adds one NA so that vector 
+    # is same length as G.series.
+    G.series <- colSums(G.projected[3:7,], na.rm=TRUE) # Sums the number of simulated 
+    # individuals for each series
+    output <- cbind(G.series, immigration_storage, lambda_storage)
+    return(output)}
+
+```
+
+We simulate Biscoe Point but only allow immigration for a period of 13 years. The site and year_stop can be switched out as needed.
+
+```{r, BISC Time Stop, echo=T, results = "hide", cache=TRUE, warning=FALSE}
+
+ BISC_count <- c(14,33,45,56,26,149,296,288,639,644,753,902,977,NA,NA,2401,2404,3081,3197)
+  BISC_years <- c(1994,1995,1996,1997,1998,1999,2000,2001,2002,2003,2004,2005,2006,
+                  2007,2008,2009,2010,2011, 2012)
+  Data <- as.data.frame(cbind(BISC_years, BISC_count))
+  colnames(Data) <- c("year","count")
+  Data %>%
+    kbl() %>%
+    kable_minimal(full_width=F,position="left")
+  
+  site_details<-data.frame(c("ORNE","BISC","MOOT","VERN"),c(13,14,74,14),c(19,18,12,11)) 
+  # stores site data (name, starting value, and time series length)
+  colnames(site_details)<-c("Site","Count","TimeSpan")
+  selection<-site_details$Site=="BISC" # can be changed out for ORNE, MOOT, and VERN
+  N <- 20 # number of accepted particles
+  keep <- matrix(ncol = 2, nrow = N) 
+  intercept <- c()  
+  slope <- c() 
+  i <- 0 # Initiate counter of accepted particles
+  j <- 0 # Initiate counter of proposed particles
+  year <- site_details$TimeSpan[selection] # input year from selected site data
+  keep_immigrants <- c()
+  keep_lambda <- c()
+  reject_lambda <- c()
+  simulated_timeseries<-Data$count
+  kept_timeseries<-Data$count
+  while(i <= N)
+  { 
+    intercept_temp <- runif(1, 0,40)
+    slope_temp <- runif(1, 0, 1)
+    intercept<- c(intercept, intercept_temp)
+    slope <- c(slope, slope_temp)
+    D_star <- mig_abund_stop(G_max_chicks, year, site_details$Count[selection], 
+                            intercept_temp, slope_temp, 13)
+    simulated_timeseries<-cbind(simulated_timeseries,D_star[,1])
+    MAPE_i <- mean(abs((Data$count-D_star[,1])/Data$count), na.rm=TRUE) * 100 
+    # # mean absolute percent error (MAPE) metric
+    if(MAPE_i <= 45)
+    { 
+      keep[i,] <- c(intercept_temp, slope_temp)
+      i <- i + 1 #update counter
+      kept_timeseries<-cbind(kept_timeseries,D_star[,1])
+      keep_immigrants <-cbind(keep_immigrants, D_star[,2])
+      keep_lambda <-cbind(keep_lambda, D_star[,3])
+    }
+    else
+    {reject_lambda <- cbind(reject_lambda, D_star[,3])
+    }
+    j <- j + 1 
+    acc_rate <- i/j # calculate the acceptance rate
+    cat("current acceptance rate = ", round(acc_rate, 4), "\n")
+  }
+  
+
+```
+
+We plot the simulated accepted time series for Biscoe Point with immigration turned off at year 10.
+
+```{r, echo=T}
+  {plot(Data$year,Data$count,pch=15,ylim=c(0,4000), main="BISC", xlab="Year", ylab="Count")
+    for (k in 1:min(j,2000))
+    {
+      lines(Data$year,simulated_timeseries[,k],col=rgb(0,0,0,0.1))
+    }
+    for (m in 1:i)
+    {
+      lines(Data$year,kept_timeseries[,m],col="cyan4")
+    }
+    points(Data$year,Data$count,pch=15,col="darkblue")}
+```
+
+\newpage
+
+#### Simulation results of ABC code with time-dependent model
+
+Simulation results using the time-dependent lambda model for all four colonies of interest. Model fit is comparable to the abundance-dependent model with similar immigration numbers.
+
+![](/Users/rachaelherman/Desktop/Time Dependent Model.png)
+\newpage
+
+#### Simulation results of ABC code with the constant lambda model  
+
+Simulation results using the constant lambda model for all four colonies of interest. Model fit is poor with the exception of Moot Point.
+
+![](/Users/rachaelherman/Desktop/Linear_model.png)
+
+
+*References*
+
+Lynch, H. J., Fagan, W. F., & Naveen, R. (2010). Population trends and reproductive success at a frequently visited penguin colony on the western Antarctic Peninsula. Polar Biol., 33(4), 493-503.
+
+Williams, T. D., & Busby, J. (1995) Bird families of the world. 2. The Penguins: Spheniscidae. Oxford University Press.
+
+\newpage
+
+## Supplemental Material S.3: Comparison of summary statistics 
+
+
+
+Here we compare three candidate summary statistics that are appropriate for time series simulations: Cross-correlation coefficient, sum of chi-squared, and mean approximate percent error (MAPE). While Scranton et al. (2014) determined that the cross-correlation coefficient could successfully be applied to evaluate population growth from a simulated dataset and population model, we were unable to reproduce this result (Supplemental Material S.3). Cross-correlation does not penalize simulated data sets that differ by a scale factor, even when there is a very high correlation. We did find chi-squared to be similar to MAPE as the accepted simulated time series were similar and produced the same posterior distributions for intercept and slope. However, chi-squared appears to penalize large deviations more so than MAPE. Nevertheless, we think that both MAPE and chi-squared are appropriate choices for the application of ABC to population dynamics and time series. 
+
+
+### 1. Cross-correlation coefficient
+```{r, cross-correlation, echo=T,  results = "hide",cache=TRUE, warning=FALSE}
+
+BISC_count <- c(14,33,45,56,26,149,296,288,639,644,753,902,977,NA,NA,2401,2404,3081,3197)
+BISC_years <- c(1994,1995,1996,1997,1998,1999,2000,2001,2002,2003,2004,2005,2006,
+                2007,2008,2009,2010,2011, 2012)
+Data <- as.data.frame(cbind(BISC_years, BISC_count))
+colnames(Data) <- c("year","count")
+site_details<-data.frame(c("ORNE","BISC","MOOT","VERN"),c(13,14,74,14),c(19,18,12,11)) 
+# stores site data (name, starting value, and time series length)
+colnames(site_details)<-c("Site","Count","TimeSpan")
+selection<-site_details$Site=="BISC" # can be changed out for ORNE, MOOT, and VERN
+N <- 100 # number of accepted particles
+keep <- matrix(ncol = 2, nrow = N)
+rej_params <-matrix(ncol = 2, nrow = 60000) 
+intercept <- c()  
+slope <- c() 
+i <- 0 # Initiate counter of accepted particles
+j <- 0 # Initiate counter of proposed particles
+year <- site_details$TimeSpan[selection] # input year from selected site data
+keep_immigrants <- c()
+keep_lambda <- c()
+keep_corr <- c()
+reject_lambda <- c()
+reject_corr <- c()
+#reject_timeseries <-Data$count
+simulated_timeseries<-Data$count
+kept_timeseries<- c()
+test <- c()
+while(i <= N)
+{ 
+  intercept_temp <- runif(1, -100, 400)
+  slope_temp <- runif(1, -1, 1)
+  intercept<- c(intercept, intercept_temp)
+  slope <- c(slope, slope_temp)
+  D_star <- abundance_fun(year, site_details$Count[selection], 
+                          intercept_temp, slope_temp)
+  simulated_timeseries<-cbind(simulated_timeseries,D_star[,1])
+  icorr <- ccf(as.vector(Data$count, mode = "numeric"), 
+               as.vector(D_star[,1], mode = "numeric"), 
+               plot=FALSE, na.action = na.pass, type = "correlation")	
+  
+  corrDist <- icorr$acf[icorr$lag==0]
+  corrDist[is.na(corrDist)] <- 0
+  distance <- 1 - corrDist
+  if(distance < 0.00001)
+  { 
+    keep[i,] <- c(intercept_temp, slope_temp)
+    i <- i + 1 #update counter
+    kept_timeseries <- cbind(kept_timeseries, D_star[,1])
+    keep_immigrants <-cbind(keep_immigrants, D_star[,2])
+    keep_lambda <-cbind(keep_lambda, D_star[,3])
+    keep_corr <-rbind(keep_corr, corrDist)
+  }
+  else
+  {
+    rej_params[i,] <- c(intercept_temp, slope_temp)
+    reject_lambda <- cbind(reject_lambda, D_star[,3])
+    reject_corr<- cbind(reject_corr, icorr)
+    #reject_timeseries<-cbind(reject_timeseries,D_star[,1])
+  }
+  j <- j + 1 
+  acc_rate <- i/j # calculate the acceptance rate
+  cat("current acceptance rate = ", round(acc_rate, 4), "\n")
+}
+```
+Here we plot the accepted ABC simulations in which the cross-correlation coefficient was the summary statistic.
+
+```{r}
+{plot(Data$year,Data$count,pch=15,ylim=c(0,4000), main="Biscoe Point", xlab="Year", ylab="Count")
+  for (k in 1:min(j,2000))
+  {
+    lines(Data$year,simulated_timeseries[,k],col=rgb(0,0,0,0.1))
+  }
+  for (m in 1:i)
+  {
+    lines(Data$year,kept_timeseries[,m],col="cyan4")
+  }
+  points(Data$year,Data$count,pch=15,col="darkblue")}
+```
+
+Here print the cross-correlation coefficients at various lags based on Scranton et al (2014). A lag of zero results in coefficients of 1, regardless of the distance threshold. 
+```{r}
+icorr <- ccf(as.vector(BISC_count, mode = "numeric"), 
+    as.vector(kept_timeseries[,2], mode = "numeric"), plot=FALSE, na.action = na.pass)	
+
+icorr
+```
+
+### 2. Sum of Chi-squared
+
+```{r, chi_sq, echo=T,  results = "hide",cache=TRUE, warning=FALSE}
+site_details<-data.frame(c("ORNE","BISC","MOOT","VERN"),c(13,14,74,14),c(19,18,12,11)) 
+# stores site data (name, starting value, and time series length)
+colnames(site_details)<-c("Site","Count","TimeSpan")
+selection<-site_details$Site=="BISC" # can be changed out for ORNE, MOOT, and VERN
+
+N <- 100 # number of accepted particles
+keep <- matrix(ncol = 3, nrow = N)
+rej_params <-matrix(ncol = 2, nrow = 60000) 
+intercept <- c()  
+slope <- c() 
+i <- 0 # Initiate counter of accepted particles
+j <- 0 # Initiate counter of proposed particles
+year <- site_details$TimeSpan[selection] # input year from selected site data
+keep_immigrants <- c()
+keep_lambda <- c()
+keep_chisq <- c()
+reject_lambda <- c()
+reject_chisq <- c()
+#reject_timeseries <-Data$count
+simulated_timeseries<-Data$count
+kept_timeseries<- c()
+test <- c()
+while(i <= N)
+{ 
+  intercept_temp <- runif(1, -25, 50)
+  slope_temp <- runif(1, 0, 1)
+  intercept<- c(intercept, intercept_temp)
+  slope <- c(slope, slope_temp)
+  D_star <- abundance_fun(year, site_details$Count[selection], 
+                          intercept_temp, slope_temp)
+  simulated_timeseries<-cbind(simulated_timeseries,D_star[,1])
+  ichisq <- sum( ( (Data$count-D_star)^2 )/Data$count, na.rm = TRUE )
+
+  if(ichisq < 10000)
+  { 
+    keep[i,] <- c(intercept_temp, slope_temp, ichisq)
+    i <- i + 1 #update counter
+    kept_timeseries <- cbind(kept_timeseries, D_star[,1])
+    keep_immigrants <-cbind(keep_immigrants, D_star[,2])
+    keep_lambda <-cbind(keep_lambda, D_star[,3])
+    #keep_chisq <-rbind(keep_chisq, ichisq)
+  }
+  else
+  {
+    rej_params[i,] <- c(intercept_temp, slope_temp)
+    reject_lambda <- cbind(reject_lambda, D_star[,3])
+    reject_chisq<- cbind(reject_chisq, ichisq)
+    #reject_timeseries<-cbind(reject_timeseries,D_star[,1])
+  }
+  j <- j + 1 
+  acc_rate <- i/j # calculate the acceptance rate
+  cat("current acceptance rate = ", round(acc_rate, 4), "\n")
+}
+```
+
+Here we plot the accepted ABC simulations in which sum of chi-squared was the summary statistic. Accepted time series are very similar to the simulations that used MAPE as the summary statistic.
+
+```{r,cache=TRUE, warning=FALSE}
+
+{plot(Data$year,Data$count,pch=15,ylim=c(0,4000), main="Biscoe Point", xlab="Year", ylab="Count")
+  for (k in 1:min(j,2000))
+  {
+    lines(Data$year,simulated_timeseries[,k],col=rgb(0,0,0,0.1))
+  }
+  for (m in 1:i)
+  {
+    lines(Data$year,kept_timeseries[,m],col="cyan4")
+  }
+  points(Data$year,Data$count,pch=15,col="darkblue")}
+```
+
+Here we plot the posterior distributions for intercept and slope for sum of chi-squared. Posterior distributions are the same as for MAPE.
+
+```{r,cache=TRUE, warning=FALSE}
+#### INTERCEPT POSTERIOR ####
+BISC_intercept <- ggplot() + 
+  geom_histogram(alpha = 0.5, binwidth = 2, aes(x = intercept,..density..), fill='azure4')+
+  geom_histogram(alpha = 0.5, binwidth = 2, aes(x = keep[,1],..density..), fill="cyan4")+
+  theme_minimal()
+
+###### SLOPE POSTERIOR #####
+BISC_slope <- ggplot() + 
+  geom_histogram(alpha = 0.5, binwidth = 0.02, aes(x = slope,..density..), fill='azure4')+
+  geom_histogram(alpha = 0.5, binwidth = 0.02, aes(x = keep[,2],..density..), fill="cyan4")+
+  theme_minimal()
+
+ggarrange(BISC_intercept, BISC_slope, 
+          ncol = 2, nrow = 1)
+```
+
+*References*  
+
+Scranton, K., J. Knape, and P. de Valpine (2014). An approximate Bayesian computation approach to parameter estimation in a stochastic stage‐structured population model. Ecology 95:1418-1428.
+
+\newpage
+
+## Supplemental Material S.4: Age class sensitivity for immigration
+
+Here we demonstrate that the age-structured ABC model is insensitive to immigrants across age classes 2-5 for all sites (see tables below). The model is, however, sensitive to immigrants in age class 1, and requires much higher total numbers of immigrants overall across all sites. This is intuitive because the model has to overcompensate for lower juvenile survival rates based on our age-structured matrix model. Therefore, our assumption that immigrants arrive at age class 2 is reasonable and conservative.
+
+#### Biscoe Point
+\  
+```{r, BISC, echo=FALSE}
+BISC <- read.csv("BISC_table2.csv")
+
+BISC %>%
+  kbl() %>%
+  kable_minimal(full_width=F,position="left" ) 
+```
+
+#### Orne Islands
+\  
+```{r, ORNE, echo=FALSE}
+ORNE <- read.csv("ORNE_table2.csv")
+
+ORNE %>%
+  kbl() %>%
+  kable_minimal(full_width=F,position="left")
+```
+
+#### Moot Point
+\  
+```{r, MOOT, echo=FALSE}
+MOOT <- read.csv("MOOT_table2.csv")
+
+MOOT %>%
+  kbl() %>%
+  kable_minimal(full_width=F,position="left")
+```
+
+#### Vernadsky Station
+\  
+```{r, VERN, echo=FALSE}
+VERN <- read.csv("VERN_table2.csv")
+
+VERN %>%
+  kbl() %>%
+  kable_minimal(full_width=F,position="left")
+```
+
+\newpage
+
+## Supplemental Material S.5: Georges Point Time Series
+
+Here we show the time series for Georges Point, a large gentoo penguin colony adjacent to Orne Islands. Blue represents Georges Point, and dark green represents Orne Islands. The colony exhibits overall continuous growth during the time period of Orne Island’s population growth, but with fluctuations that could potentially result in a source of immigrant numbers that our models simulated. However, the time series for Georges Point does not suggest that this site was reaching a carrying capacity, and it is unclear if and why individuals from this colony would have sought out new breeding locations. 
+
+```{r, S.4, echo=FALSE}
+GP <- read.csv("Georges_point.csv")
+ORNE_count <- c(13,NA,NA,NA,NA,NA,41,NA,58,58,NA,103,NA,141,164,222,348,483,412,401)
+ORNE_years <- c(1999,2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,
+                2012,2013,2014,2015,2016,2017,2018)
+Data <- as.data.frame(cbind(ORNE_years,ORNE_count))
+colnames(Data) <- c("year","count")
+
+```
+
+```{r, message=FALSE, warning=FALSE}
+plot(Data$year, Data$count, type="b", pch=15, col = "darkgreen", 
+     ylim = c(0,4000), xlim = c(1988, 2018), xlab = "Year", ylab = "Nests")
+lines(GP$year, GP$count, type="b", pch=17, col = "blue")
+legend(1988, 3800, legend=c("Orne Islands", "Georges Point"),
+       col=c("darkgreen", "blue"), pch=c(15,17), cex=0.8)
+
+```
+
+
+
+
+
